@@ -1,0 +1,22 @@
+{
+  "name": "ai-resume-coach",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "ejs": "^4.0.1",
+    "express": "^5.2.1",
+    "groq-sdk": "^0.37.0",
+    "multer": "^2.0.2",
+    "nodemon": "^3.1.11",
+    "pdf-parse-new": "^2.0.0"
+  }
+}

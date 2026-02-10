@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Resume Feedback</title>
+    <link rel="stylesheet" href="/css/result.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>✨ AI Resume Feedback ✨</h1>
+
+      <div class="score-badge">
+  <span class="score-number"><%= score %></span>
+  <span class="score-text">/ 100</span>
+  <p class="score-label">Resume Score</p>
+</div>
+
+
+      <!-- Hidden textarea for download -->
+      <textarea id="feedbackText" hidden><%= feedback %></textarea>
+
+      <% feedback.split("\n").forEach(line => { 
+     let text = line.trim();
+%>
+
+  <% if (text !== "") { %>
+    <p>
+      <%- text
+
+        .replace(
+          /\*\*([^*]+?):\*\*/g,
+          '<span class="label">$1:</span>'
+        )
+
+        .replace(
+          /\*\*(.*?)\*\*/g,
+          '<strong>$1</strong>'
+        )
+      %>
+    </p>
+  <% } %>
+
+<% }) %>
+
+
+      <div style="margin-top: 30px;">
+        <button class="btn" onclick="downloadFeedback()">
+          Download Feedback
+        </button>
+
+        <a class="btn" href="/" style="margin-left: 12px;">
+          Analyze another resume
+        </a>
+      </div>
+    </div>
+
+    <script>
+      function downloadFeedback() {
+        const text = document.getElementById("feedbackText").value;
+
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = window.URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "resume-feedback.txt";
+        a.click();
+
+        window.URL.revokeObjectURL(url);
+      }
+    </script>
+  </body>
+</html>

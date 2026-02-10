@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>AI Resume Coach</title>
+    <link rel="stylesheet" href="/css/index.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>AI Resume Improvement Coach</h1>
+      <p class="subtitle">
+        Upload your resume and get AI-powered feedback to improve it for your target role.
+      </p>
+
+      <form 
+  action="/analyze" 
+  method="POST" 
+  enctype="multipart/form-data"
+  onsubmit="showLoader()"
+  id="resumeForm"
+>
+  <div class="field">
+    <label>Target Role</label>
+    <input type="text" name="role" placeholder="e.g. Frontend Developer" required />
+  </div>
+
+  <div class="field">
+    <label>Experience Level</label>
+    <select name="experience" required>
+      <option value="">Select</option>
+      <option value="student">Student</option>
+      <option value="fresher">Fresher</option>
+      <option value="experienced">Experienced</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Upload Resume (PDF / TXT)</label>
+    <input type="file" name="resume" required />
+  </div>
+
+  <button type="submit">Analyze Resume</button>
+</form>
+
+<div id="loader" class="loader hidden">
+  <div class="spinner"></div>
+  <p>Analyzing your resume…</p>
+</div>
+
+<script src="/js/loader.js"></script>
+
+    </div>
+  </body>
+</html>
