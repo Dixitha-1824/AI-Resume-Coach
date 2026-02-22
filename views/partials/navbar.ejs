@@ -1,0 +1,33 @@
+<link rel="stylesheet" href="/css/navbar.css">
+
+<div class="navbar">
+  <div class="nav-left">
+    <a href="/" class="nav-logo">AI Resume Coach</a>
+  </div>
+
+  <div class="nav-right" id="navLinks"></div>
+</div>
+
+<script>
+  window.token = localStorage.getItem("token");
+
+  const nav = document.getElementById("navLinks");
+
+  if (window.token) {
+    nav.innerHTML = `
+      <a href="/" class="nav-link">Analyze</a>
+      <a href="/dashboard" class="nav-link">Dashboard</a>
+      <a href="#" onclick="logout()" class="nav-btn">Logout</a>
+    `;
+  } else {
+    nav.innerHTML = `
+      <a href="/login" class="nav-link">Login</a>
+      <a href="/register" class="nav-btn">Register</a>
+    `;
+  }
+
+  function logout() {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  }
+</script>

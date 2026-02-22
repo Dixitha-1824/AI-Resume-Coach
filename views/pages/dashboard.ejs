@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Resume Analyses</title>
+  <link rel="stylesheet" href="/css/result.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+
+<body>
+
+  <%- include("../partials/navbar") %>
+
+  <div class="container dashboard-container">
+    <h1>📊 My Resume Analyses</h1>
+
+    <div class="table-wrapper">
+      <table id="analysisTable" class="styled-table">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Experience</th>
+            <th>Score</th>
+            <th>Date</th>
+            <th>View</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Data loads here -->
+        </tbody>
+      </table>
+    </div>
+
+    <a href="/" class="btn analyze-btn">Analyze New Resume</a>
+  </div>
+
+  <!-- Modern Modal -->
+  <div id="modalOverlay" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>Resume Feedback</h2>
+        <span class="close-btn" onclick="closeModal()">×</span>
+      </div>
+      <div id="modalContent" class="modal-content"></div>
+    </div>
+  </div>
+
+  <script>
+    if (!window.token) {
+      alert("Please login first.");
+      window.location.href = "/login";
+    }
+
+    async function loadAnalyses() {
+      try {
+        const response = await fetch("/my-analyses", {
+          headers: {
+            "Authorization": "Bearer " + window.token
+          }
+        });
+
+        const data = await response.json();
+        const tbody = document.querySelector("#analysisTable tbody");
+
+        tbody.innerHTML = "";
+
+        if (!data.data || data.data.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='5'>No analyses found</td></tr>";
+          return;
+        }
+
+        data.data.forEach(item => {
+          const row = document.createElement("tr");
+
+          row.innerHTML = `
+            <td>${item.role}</td>
+            <td>${item.experience}</td>
+            <td><span class="score-pill">${item.score}</span></td>
+            <td>${new Date(item.createdAt).toLocaleDateString()}</td>
+            <td><button class="view-btn">View</button></td>
+          `;
+
+          row.querySelector(".view-btn").addEventListener("click", () => {
+            viewFeedback(item.feedback);
+          });
+
+          tbody.appendChild(row);
+        });
+
+      } catch (error) {
+        console.error("Error loading analyses:", error);
+      }
+    }
+
+    function viewFeedback(feedback) {
+      const overlay = document.getElementById("modalOverlay");
+      const content = document.getElementById("modalContent");
+
+      content.innerHTML = "";
+
+      feedback.split("\n").forEach(line => {
+        const text = line.trim();
+        if (text !== "") {
+          const p = document.createElement("p");
+          p.innerHTML = text
+            .replace(/\*\*([^*]+?):\*\*/g, '<strong>$1:</strong>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+          content.appendChild(p);
+        }
+      });
+
+      overlay.classList.remove("hidden");
+    }
+
+    function closeModal() {
+      document.getElementById("modalOverlay").classList.add("hidden");
+    }
+
+    loadAnalyses();
+  </script>
+
+</body>
+</html>

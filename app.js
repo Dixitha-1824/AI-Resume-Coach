@@ -1,27 +1,41 @@
 const express = require("express");
 const path = require("path");
 const dotenv = require("dotenv");
+const mongoose = require("mongoose");
 const multer = require("multer");
 const fs = require("fs");
 const pdfParse = require("pdf-parse-new");
-const cleanResumeText = require("./utils/cleanText");
 const Groq = require("groq-sdk");
+const cleanResumeText = require("./utils/cleanText");
 const buildResumePrompt = require("./utils/aiPrompt");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
+const User = require("./models/User");
+const Resume = require("./models/Resume");
+
 
 dotenv.config();
+
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch(err => console.log(" MongoDB Error:", err.message));
+
+
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// middleware
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -35,37 +49,106 @@ const storage = multer.diskStorage({
   },
 });
 
-const fileFilter = (req, file, cb) => {
-  if (
-    file.mimetype === "application/pdf" ||
-    file.mimetype === "text/plain"
-  ) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only PDF or TXT files allowed"), false);
+const upload = multer({ storage });
+
+
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).json({ message: "Access denied. No token provided." });
   }
-};
 
-const upload = multer({ storage, fileFilter });
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const verified = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = verified;
+    next();
+  } catch (err) {
+    return res.status(400).json({ message: "Invalid token" });
+  }
+}
 
 
 
-// routes
 app.get("/", (req, res) => {
   res.render("pages/index");
 });
 
-app.post("/analyze", upload.single("resume"), async (req, res) => {
+// REGISTER
+app.post("/register", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.json({ message: "User already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    await newUser.save();
+
+    res.json({ message: "User registered successfully" });
+
+  } catch (error) {
+    console.error(error);
+    res.json({ message: "Error registering user" });
+  }
+});
+
+// LOGIN
+app.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({
+      message: "Login successful",
+      token: token,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.json({ message: "Error during login" });
+  }
+});
+
+app.post("/analyze", verifyToken, upload.single("resume"), async (req, res) => {
+  console.log("Analyze route hit");
+
   try {
     if (!req.file) {
-      return res.send("No file uploaded");
+      return res.json({ message: "No file uploaded" });
     }
 
     const { role, experience } = req.body;
     const filePath = req.file.path;
+
     let resumeText = "";
 
-    // Extract resume text
     if (req.file.mimetype === "text/plain") {
       resumeText = fs.readFileSync(filePath, "utf-8");
     } else {
@@ -74,46 +157,83 @@ app.post("/analyze", upload.single("resume"), async (req, res) => {
       resumeText = pdfData.text;
     }
 
-    //Clean text
     const cleanedText = cleanResumeText(resumeText);
 
-    //Build AI prompt
     const prompt = buildResumePrompt({
       role,
       experience,
       resume: cleanedText,
     });
 
-    //Call Groq
     const aiResponse = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [{ role: "user", content: prompt }],
     });
 
-    // DEFINE aiFeedback FIRST
     const aiFeedback = aiResponse.choices[0].message.content;
 
-    // Extract resume score
     const scoreMatch = aiFeedback.match(/Resume Score:\s*(\d+)\s*\/\s*100/i);
     const resumeScore = scoreMatch ? scoreMatch[1] : "N/A";
 
-    // console.log("======= AI FEEDBACK =======");
-    // console.log(aiFeedback);
-    // console.log("===========================");
-
-    //Render result page
-    res.render("pages/result", {
-      feedback: aiFeedback,
+    const savedResume = await Resume.create({
+      user: req.user.id,
+      role,
+      experience,
       score: resumeScore,
+      feedback: aiFeedback,
+    });
+
+    console.log("Resume saved:", savedResume._id);
+
+    res.json({
+      message: "Analysis successful and saved",
+      score: resumeScore,
+      feedback: aiFeedback,
     });
 
   } catch (err) {
-    console.error(err);
-    res.send("Error during resume analysis");
+    console.error("Error during resume analysis:", err);
+    res.json({ message: "Error during resume analysis" });
   }
 });
 
-// server start
+
+app.get("/my-analyses", verifyToken, async (req, res) => {
+  try {
+    const resumes = await Resume.find({ user: req.user.id })
+      .sort({ createdAt: -1 });
+
+    res.json({
+      total: resumes.length,
+      data: resumes
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.json({ message: "Error fetching analyses" });
+  }
+});
+
+app.get("/result", (req, res) => {
+  res.render("pages/result");
+});
+
+app.get("/dashboard", (req, res) => {
+  res.render("pages/dashboard");
+});
+
+// Register Page
+app.get("/register", (req, res) => {
+  res.render("pages/register");
+});
+
+// Login Page
+app.get("/login", (req, res) => {
+  res.render("pages/login");
+});
+
+
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(` Server running on http://localhost:${PORT}`);
 });
