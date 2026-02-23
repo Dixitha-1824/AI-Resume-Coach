@@ -14,17 +14,22 @@ const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const Resume = require("./models/Resume");
 
-
 dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.log(" MongoDB Error:", err.message));
+  .catch(err => console.log("MongoDB Error:", err.message));
 
+const uploadsPath = path.join(__dirname, "uploads");
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
@@ -34,15 +39,13 @@ const groq = new Groq({
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
-
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, uploadsPath); 
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + "-" + file.originalname);
@@ -50,7 +53,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-
 
 function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -71,12 +73,11 @@ function verifyToken(req, res, next) {
 }
 
 
-
 app.get("/", (req, res) => {
   res.render("pages/index");
 });
 
-// REGISTER
+
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -88,13 +89,11 @@ app.post("/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = new User({
+    await User.create({
       name,
       email,
       password: hashedPassword,
     });
-
-    await newUser.save();
 
     res.json({ message: "User registered successfully" });
 
@@ -104,7 +103,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// LOGIN
+
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -120,14 +119,14 @@ app.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { id: user._id },
       process.env.JWT_SECRET,
       { expiresIn: "1h" }
     );
 
     res.json({
       message: "Login successful",
-      token: token,
+      token,
     });
 
   } catch (error) {
@@ -136,9 +135,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.post("/analyze", verifyToken, upload.single("resume"), async (req, res) => {
-  console.log("Analyze route hit");
 
+app.post("/analyze", verifyToken, upload.single("resume"), async (req, res) => {
   try {
     if (!req.file) {
       return res.json({ message: "No file uploaded" });
@@ -175,7 +173,7 @@ app.post("/analyze", verifyToken, upload.single("resume"), async (req, res) => {
     const scoreMatch = aiFeedback.match(/Resume Score:\s*(\d+)\s*\/\s*100/i);
     const resumeScore = scoreMatch ? scoreMatch[1] : "N/A";
 
-    const savedResume = await Resume.create({
+    await Resume.create({
       user: req.user.id,
       role,
       experience,
@@ -183,17 +181,15 @@ app.post("/analyze", verifyToken, upload.single("resume"), async (req, res) => {
       feedback: aiFeedback,
     });
 
-    console.log("Resume saved:", savedResume._id);
-
     res.json({
-      message: "Analysis successful and saved",
+      message: "Analysis successful",
       score: resumeScore,
       feedback: aiFeedback,
     });
 
   } catch (err) {
     console.error("Error during resume analysis:", err);
-    res.json({ message: "Error during resume analysis" });
+    res.status(500).json({ message: "Error during resume analysis" });
   }
 });
 
@@ -205,12 +201,12 @@ app.get("/my-analyses", verifyToken, async (req, res) => {
 
     res.json({
       total: resumes.length,
-      data: resumes
+      data: resumes,
     });
 
   } catch (error) {
     console.error(error);
-    res.json({ message: "Error fetching analyses" });
+    res.status(500).json({ message: "Error fetching analyses" });
   }
 });
 
@@ -222,18 +218,14 @@ app.get("/dashboard", (req, res) => {
   res.render("pages/dashboard");
 });
 
-// Register Page
 app.get("/register", (req, res) => {
   res.render("pages/register");
 });
 
-// Login Page
 app.get("/login", (req, res) => {
   res.render("pages/login");
 });
 
-
-
 app.listen(PORT, () => {
-  console.log(` Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
